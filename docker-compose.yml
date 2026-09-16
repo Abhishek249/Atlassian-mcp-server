@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  atlassian-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: atlassian-mcp-server
+    image: atlassian-mcp-server:latest
+    
+    # Environment variables (override with .env file)
+    environment:
+      - ATLASSIAN_CLOUD_ID=${ATLASSIAN_CLOUD_ID}
+      - ATLASSIAN_EMAIL=${ATLASSIAN_EMAIL}
+      - ATLASSIAN_API_TOKEN=${ATLASSIAN_API_TOKEN}
+      - JIRA_DEFAULT_PROJECT=${JIRA_DEFAULT_PROJECT:-PH}
+      - MCP_LOG_LEVEL=${MCP_LOG_LEVEL:-INFO}
+    
+    # Use stdin/stdout for MCP communication
+    stdin_open: true
+    tty: true
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Network mode (host for local development)
+    network_mode: bridge
