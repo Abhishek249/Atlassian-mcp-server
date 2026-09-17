@@ -5,20 +5,10 @@ import logging
 import sys
 from typing import Any
 
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-from mcp.types import TextContent, Tool
+from mcp.server import FastMCP
 
 from .config import Settings
 from .jira_client import JiraClient
-from .tools import (
-    jira_add_comment,
-    jira_create_issue,
-    jira_get_issue,
-    jira_search_issues,
-    jira_transition_issue,
-    jira_update_issue,
-)
 
 # Configure logging
 logging.basicConfig(
@@ -28,196 +18,146 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
-def create_server() -> Server:
-    """Create and configure the MCP server."""
-    server = Server("atlassian-mcp-server")
-    settings = Settings()
-    jira_client = JiraClient(settings)
-
-    @server.list_tools()
-    async def list_tools() -> list[Tool]:
-        """List all available tools."""
-        return [
-            Tool(
-                name="jira_create_issue",
-                description="Create a new Jira issue with custom fields",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "project_key": {
-                            "type": "string",
-                            "description": "Project key (e.g., 'PH', 'CDP')",
-                        },
-                        "summary": {
-                            "type": "string",
-                            "description": "Issue title/summary",
-                        },
-                        "issue_type": {
-                            "type": "string",
-                            "description": "Issue type (Task, Bug, Story, Epic, etc.)",
-                        },
-                        "description": {
-                            "type": "string",
-                            "description": "Issue description (markdown supported)",
-                        },
-                        "priority": {
-                            "type": "string",
-                            "description": "Priority name (Highest, High, Medium, Low, Lowest)",
-                        },
-                        "assignee_email": {
-                            "type": "string",
-                            "description": "Assignee email address",
-                        },
-                        "labels": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "Array of label strings",
-                        },
-                    },
-                    "required": ["project_key", "summary", "issue_type"],
-                },
-            ),
-            Tool(
-                name="jira_update_issue",
-                description="Update an existing Jira issue",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "issue_key": {
-                            "type": "string",
-                            "description": "Issue key (e.g., 'PH-2301')",
-                        },
-                        "summary": {"type": "string", "description": "New issue title"},
-                        "description": {"type": "string", "description": "New description"},
-                        "assignee_email": {"type": "string", "description": "New assignee email"},
-                        "priority": {"type": "string", "description": "New priority name"},
-                        "labels": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                            "description": "New labels array",
-                        },
-                    },
-                    "required": ["issue_key"],
-                },
-            ),
-            Tool(
-                name="jira_search_issues",
-                description="Search for Jira issues using JQL",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "jql": {
-                            "type": "string",
-                            "description": "Jira Query Language string",
-                        },
-                        "max_results": {
-                            "type": "integer",
-                            "description": "Maximum number of results (default: 50)",
-                            "default": 50,
-                        },
-                    },
-                    "required": ["jql"],
-                },
-            ),
-            Tool(
-                name="jira_get_issue",
-                description="Get detailed information about a Jira issue",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "issue_key": {
-                            "type": "string",
-                            "description": "Issue key (e.g., 'PH-2301')",
-                        },
-                        "include_comments": {
-                            "type": "boolean",
-                            "description": "Include comments (default: true)",
-                            "default": True,
-                        },
-                    },
-                    "required": ["issue_key"],
-                },
-            ),
-            Tool(
-                name="jira_add_comment",
-                description="Add a comment to a Jira issue",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "issue_key": {
-                            "type": "string",
-                            "description": "Issue key (e.g., 'PH-2301')",
-                        },
-                        "comment": {
-                            "type": "string",
-                            "description": "Comment text (markdown supported)",
-                        },
-                    },
-                    "required": ["issue_key", "comment"],
-                },
-            ),
-            Tool(
-                name="jira_transition_issue",
-                description="Transition a Jira issue to a new status",
-                inputSchema={
-                    "type": "object",
-                    "properties": {
-                        "issue_key": {
-                            "type": "string",
-                            "description": "Issue key (e.g., 'PH-2301')",
-                        },
-                        "transition_name": {
-                            "type": "string",
-                            "description": "Target status name (e.g., 'In Progress', 'Done')",
-                        },
-                    },
-                    "required": ["issue_key", "transition_name"],
-                },
-            ),
-        ]
-
-    @server.call_tool()
-    async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-        """Handle tool calls."""
-        try:
-            if name == "jira_create_issue":
-                result = await jira_create_issue(jira_client, arguments)
-            elif name == "jira_update_issue":
-                result = await jira_update_issue(jira_client, arguments)
-            elif name == "jira_search_issues":
-                result = await jira_search_issues(jira_client, arguments)
-            elif name == "jira_get_issue":
-                result = await jira_get_issue(jira_client, arguments)
-            elif name == "jira_add_comment":
-                result = await jira_add_comment(jira_client, arguments)
-            elif name == "jira_transition_issue":
-                result = await jira_transition_issue(jira_client, arguments)
-            else:
-                raise ValueError(f"Unknown tool: {name}")
-
-            return [TextContent(type="text", text=result)]
-        except Exception as e:
-            logger.error(f"Error executing tool {name}: {e}", exc_info=True)
-            return [TextContent(type="text", text=f"Error: {str(e)}")]
-
-    return server
+# Create server instance
+mcp = FastMCP("atlassian-mcp-server")
+settings = Settings()
+jira_client = JiraClient(settings)
 
 
-async def run_server() -> None:
-    """Run the MCP server."""
-    logger.info("Starting Atlassian MCP Server...")
-    server = create_server()
+@mcp.tool()
+async def jira_create_issue(
+    project_key: str,
+    summary: str,
+    issue_type: str,
+    description: str = "",
+    priority: str | None = None,
+    assignee_email: str | None = None,
+    labels: list[str] | None = None,
+) -> str:
+    """Create a new Jira issue with custom fields.
+    
+    Args:
+        project_key: Project key (e.g., 'PH', 'CDP')
+        summary: Issue title/summary
+        issue_type: Issue type (Task, Bug, Story, Epic, etc.)
+        description: Issue description (markdown supported)
+        priority: Priority name (Highest, High, Medium, Low, Lowest)
+        assignee_email: Assignee email address
+        labels: Array of label strings
+    
+    Returns:
+        Success message with issue key and URL
+    """
+    from .tools import jira_create_issue as _create
+    return await _create(jira_client, {
+        "project_key": project_key,
+        "summary": summary,
+        "issue_type": issue_type,
+        "description": description,
+        "priority": priority,
+        "assignee_email": assignee_email,
+        "labels": labels or [],
+    })
 
-    async with stdio_server() as (read_stream, write_stream):
-        logger.info("Server running on stdio")
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+
+@mcp.tool()
+async def jira_update_issue(
+    issue_key: str,
+    summary: str | None = None,
+    description: str | None = None,
+    assignee_email: str | None = None,
+    priority: str | None = None,
+    labels: list[str] | None = None,
+) -> str:
+    """Update an existing Jira issue.
+    
+    Args:
+        issue_key: Issue key (e.g., 'PH-2301')
+        summary: New issue title
+        description: New description
+        assignee_email: New assignee email
+        priority: New priority name
+        labels: New labels array
+    
+    Returns:
+        Success message
+    """
+    from .tools import jira_update_issue as _update
+    return await _update(jira_client, {
+        "issue_key": issue_key,
+        "summary": summary,
+        "description": description,
+        "assignee_email": assignee_email,
+        "priority": priority,
+        "labels": labels,
+    })
+
+
+@mcp.tool()
+async def jira_search_issues(jql: str, max_results: int = 50) -> str:
+    """Search for Jira issues using JQL (Jira Query Language).
+    
+    Args:
+        jql: Jira Query Language string
+        max_results: Maximum number of results (default: 50)
+    
+    Returns:
+        Formatted list of matching issues
+    """
+    from .tools import jira_search_issues as _search
+    return await _search(jira_client, {"jql": jql, "max_results": max_results})
+
+
+@mcp.tool()
+async def jira_get_issue(issue_key: str, include_comments: bool = True) -> str:
+    """Get detailed information about a Jira issue.
+    
+    Args:
+        issue_key: Issue key (e.g., 'PH-2301')
+        include_comments: Include comments (default: true)
+    
+    Returns:
+        Detailed issue information
+    """
+    from .tools import jira_get_issue as _get
+    return await _get(jira_client, {"issue_key": issue_key, "include_comments": include_comments})
+
+
+@mcp.tool()
+async def jira_add_comment(issue_key: str, comment: str) -> str:
+    """Add a comment to a Jira issue.
+    
+    Args:
+        issue_key: Issue key (e.g., 'PH-2301')
+        comment: Comment text (markdown supported)
+    
+    Returns:
+        Success message
+    """
+    from .tools import jira_add_comment as _comment
+    return await _comment(jira_client, {"issue_key": issue_key, "comment": comment})
+
+
+@mcp.tool()
+async def jira_transition_issue(issue_key: str, transition_name: str) -> str:
+    """Transition a Jira issue to a new status.
+    
+    Args:
+        issue_key: Issue key (e.g., 'PH-2301')
+        transition_name: Target status name (e.g., 'In Progress', 'Done')
+    
+    Returns:
+        Success message
+    """
+    from .tools import jira_transition_issue as _transition
+    return await _transition(jira_client, {"issue_key": issue_key, "transition_name": transition_name})
 
 
 def main() -> None:
     """Main entry point."""
     try:
-        asyncio.run(run_server())
+        logger.info("Starting Atlassian MCP Server...")
+        asyncio.run(mcp.run())
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
