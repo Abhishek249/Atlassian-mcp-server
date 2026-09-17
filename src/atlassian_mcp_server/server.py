@@ -1,6 +1,5 @@
 """Main server implementation."""
 
-import asyncio
 import logging
 import sys
 from typing import Any
@@ -157,7 +156,7 @@ def main() -> None:
     """Main entry point."""
     try:
         logger.info("Starting Atlassian MCP Server...")
-        asyncio.run(mcp.run())
+        mcp.run(transport="stdio")
     except KeyboardInterrupt:
         logger.info("Server stopped by user")
     except Exception as e:
